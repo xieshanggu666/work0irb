@@ -5,8 +5,8 @@
 import { FG } from '../engine';
 
 const TRAIN_STATUS = {
-  moving: '行驶中', docked: '装卸中', waiting: '等站排队',
-  blocked: '堵死/让行', noroute: '断路', paused: '已停运', idle: '待命',
+  moving: '行驶中', docked: '装卸中', waiting: '等站/交叉口排队', meeting: '单线会车等待',
+  blocked: '堵死（需改线）', noroute: '断路', paused: '已停运', idle: '待命',
 };
 const BUILDING_STATUS = {
   working: '生产中/流动', starving: '缺料', blocked: '堵塞',

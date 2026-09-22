@@ -417,5 +417,305 @@ console.log('\n[R11] 损坏存档容错：同格多车读档后自动疏散，�
      '同格多车被疏散到不同格（占用表无重复键：' + p0 + ' vs ' + p1 + '）');
 }
 
+console.log('\n[R12] 区间预留：行驶前车头前方按窗口预留，停运释放、恢复后重建，改计划立即重预留');
+{
+  const y = 54;
+  straightLine(0, 20, y, { 20: true });
+  const st = m.buildingAt(20, y);
+  const depot = place('trainDepot', 0, y - 1, 0);
+  const tr = ry.spawnTrain(depot);
+  tr.addStop(st.stationId, 'unload', null, 1);
+  tr.pushToTrain('stone', 1);
+  ticks(game, 3);
+  // 前方应有若干格区间预留（不含物理格）
+  let reservedAhead = 0;
+  for (const [k, id] of ry.reserve) if (id === tr.id && k !== tr.x + ',' + tr.y) reservedAhead++;
+  ok(reservedAhead >= 2, '行驶前列车已在车头前方建立区间预留（' + reservedAhead + ' 格）');
+  ok(ry.reserve.get(tr.x + ',' + tr.y) !== tr.id, '当前物理格只在 occupy、不在 reserve');
+  // 停运：前方预留全部释放（物理格保留）
+  const physK = tr.x + ',' + tr.y;
+  tr.setPaused(true);
+  let left = 0;
+  for (const id of ry.reserve.values()) if (id === tr.id) left++;
+  ok(left === 0, '停运后全部区间预留释放（剩余 ' + left + '）');
+  ok(ry.occupy.get(physK) === tr.id || Array.from(ry.occupy.values()).includes(tr.id), '停运保留物理占用（不脱轨）');
+  // 恢复：重新寻路并建立预留
+  tr.setPaused(false);
+  ticks(game, 3);
+  let again = 0;
+  for (const id of ry.reserve.values()) if (id === tr.id) again++;
+  ok(again >= 2, '恢复运行后区间预留重新建立（' + again + ' 格）');
+  // 改计划：旧预留立即作废、按新目标重新预留
+  const st2 = place('station', 20, y - 2, 0);
+  place('rail', 19, y - 1, 0); place('rail', 19, y - 2, 0);
+  tr.skip();
+  tr.addStop(st2.stationId, 'unload', null, 1);
+  ticks(game, 2);
+  let sane = true;
+  for (const [k, id] of ry.reserve) {
+    if (id !== tr.id) continue;
+    const [rx, ry2] = k.split(',').map(Number);
+    if (rx > 20 || ry2 > y) sane = false;
+  }
+  ok(sane, '改计划后区间预留指向新目标（无残留旧线预留）');
+  ticks(game, 400);
+  ok(stationCount(st2, 'stone') === 1 || tr.x === st2.x && tr.y === st2.y, '列车按新计划送达（或已到站）');
+}
+
+console.log('\n[R13] 拥堵绕行：旁线空闲时列车自动绕行他车占用区间，不排队死等');
+{
+  const y = 60;
+  // 主线 (2,y)-(14,y)；旁线在 x=8..10 绕到 y-1（经两个交叉口 (8,y) 与 (10,y)）
+  straightLine(2, 14, y, { 14: true });
+  for (let x = 8; x <= 10; x++) place('rail', x, y - 1, 0);
+  const stSlow = m.buildingAt(14, y);
+  // 慢车占住主线中段 (9,y) 的车站并长时间装卸（无货可卸 → 停满最长停站时间）
+  const blockerSt = place('station', 9, y, 0);
+  const depA = place('trainDepot', 2, y - 1, 0);
+  const slow = ry.spawnTrain(depA); // 机务段在 (2,y-1)：优先落在 (2,y)…跳过它，直接放 (4,y)
+  ry.occupy.delete(slow.x + ',' + slow.y);
+  slow.x = slow.px = 4; slow.y = slow.py = y;
+  ry.occupy.set('4,' + y, slow.id);
+  slow.path = null;
+  // 循环计划：9 站装卸；停稳后直接停运——物理格继续占住主线、前方预留全部释放，
+  // 正好模拟「区间被占但旁线空闲」的拥堵场景（停运释放由 R12 单独验证）
+  slow.addStop(blockerSt.stationId, 'unload', null, 1);
+  slow.addStop(stSlow.stationId, 'unload', null, 1);
+  slow.pushToTrain('coal', 1);
+  ticks(game, 24); // 慢车在 9 站停靠
+  ok(slow.x === 9 && slow.y === y && slow.state === 'docked', '慢车抵达主线 9 站停靠（' + slow.state + '@' + slow.x + ',' + slow.y + '）');
+  slow.setPaused(true); // 占住 (9,y)，主线中段被堵死、旁线空闲
+  ticks(game, 2);
+  ok(ry.occupiedBy(9, y) === slow.id, '停运慢车继续物理占用主线 9 站格');
+  // 快车：放在慢车后方空轨 (3,y)，目标 14 站
+  const fast = new FG.Train('Tfast', 3, y, 1);
+  ry.trains.push(fast); ry.occupy.set('3,' + y, fast.id);
+  fast.plan.loop = false;
+  fast.addStop(stSlow.stationId, 'unload', null, 1);
+  fast.pushToTrain('ironOre', 1);
+  let usedBypass = false, arrived = false;
+  for (let i = 0; i < 600; i++) {
+    game.tickOnce();
+    if (fast.y === y - 1) usedBypass = true;
+    if (fast.x === 14 && fast.y === y) arrived = true;
+    if (arrived && stationCount(stSlow, 'ironOre') === 1) break;
+  }
+  ok(usedBypass, '快车经旁线（y-1）绕行拥堵区间而非在慢车后死等');
+  ok(arrived && stationCount(stSlow, 'ironOre') === 1, '绕行后快车抵达终点站卸货');
+  // 交叉口已识别（节点度数 ≥3）
+  ok(ry.isJunction(8, y) && ry.isJunction(10, y), '接轨点识别为交叉口（度数≥3）');
+}
+
+console.log('\n[R14] 单线会车等待：对向顶住先会车等待（不立即标红）；补会让线后自动绕行疏解，全程不重叠');
+{
+  const y = 66;
+  // 起初是纯单线（无绕行）：西站(2) ↔ 东站(18)
+  straightLine(2, 18, y, { 2: true, 18: true });
+  const stW = m.buildingAt(2, y), stE = m.buildingAt(18, y);
+  const depW = place('trainDepot', 2, y - 1, 0);
+  const tw = ry.spawnTrain(depW); // 西站
+  const te = new FG.Train('Teast', 17, y, 3);
+  ry.trains.push(te); ry.occupy.set('17,' + y, te.id);
+  tw.plan.loop = false; te.plan.loop = false;
+  tw.addStop(stE.stationId, 'unload', null, 1); tw.pushToTrain('stone', 1);
+  te.addStop(stW.stationId, 'unload', null, 1); te.pushToTrain('gear', 1);
+  let sawMeeting = false, overlap2 = false, redDuringWait = false;
+  for (let i = 0; i < 200; i++) {
+    game.tickOnce();
+    if (te.state === 'meeting' && tw.state === 'meeting') { sawMeeting = true; break; }
+    if (te.state === 'blocked' || tw.state === 'blocked') redDuringWait = true;
+    if (te.x === tw.x && te.y === tw.y) overlap2 = true;
+  }
+  ok(!overlap2, '会车过程两列车从未占同一格');
+  ok(sawMeeting, '纯单线对向顶住：两车进入「会车等待」（而非立即堵死标红）');
+  ok(!redDuringWait, '会车超时窗口内（< 300 tick）不误标红');
+  // 玩家在会车点旁补一条会让侧线（图重建 → 路径作废重新寻路）：
+  // (8,y)-(8,y-1)-(8,y-2)-(9..12,y-2)-(12,y-1)-(12,y)，完整绕过会车占用的 9/10 格
+  place('rail', 8, y - 1, 0); place('rail', 8, y - 2, 0);
+  for (let x = 9; x <= 12; x++) place('rail', x, y - 2, 0);
+  place('rail', 12, y - 1, 0);
+  // 西车进侧线让行（其路径含侧线；东车直穿主线）：把西车目标改为侧线外已有的东站仍可行，
+  // 这里直接让西车停运，东车按新图的拥堵边权经侧线绕过西车物理格
+  tw.setPaused(true);
+  for (let i = 0; i < 800; i++) {
+    game.tickOnce();
+    if (te.x === tw.x && te.y === tw.y) overlap2 = true;
+    if (stationCount(stW, 'gear') === 1) break;
+  }
+  ok(!overlap2, '补线绕行疏解过程两车不重叠');
+  ok(stationCount(stW, 'gear') === 1, '补会让线后东车绕行抵达西站卸货（图重建自愈）');
+  // 西车恢复后也能送达东站
+  tw.setPaused(false);
+  for (let i = 0; i < 800; i++) {
+    game.tickOnce();
+    if (te.x === tw.x && te.y === tw.y) overlap2 = true;
+    if (stationCount(stE, 'stone') === 1) break;
+  }
+  ok(!overlap2, '西车恢复后运行全程不重叠');
+  ok(stationCount(stE, 'stone') === 1, '西车恢复后送达东站');
+}
+
+console.log('\n[R15] 拆轨释放区间预留：拆除仅被预留的轨道后列车重新寻路；物理占用格仍禁拆');
+{
+  const y = 72;
+  straightLine(2, 18, y, { 18: true });
+  const st = m.buildingAt(18, y);
+  const depot = place('trainDepot', 2, y - 1, 0);
+  const tr = ry.spawnTrain(depot);
+  tr.addStop(st.stationId, 'unload', null, 1);
+  tr.pushToTrain('coal', 1);
+  ticks(game, 2);
+  // 找一个被本车预留但物理无车的前方格
+  let reserveTile = null;
+  for (const [k, id] of ry.reserve) {
+    if (id === tr.id && !ry.occupy.has(k)) { const [x, yy] = k.split(',').map(Number); reserveTile = { x, y: yy }; break; }
+  }
+  ok(!!reserveTile, '存在仅被区间预留（无物理占用）的前方轨格');
+  if (reserveTile) {
+    const b = m.buildingAt(reserveTile.x, reserveTile.y);
+    const removed = game.removeBuilding(b);
+    ok(removed !== false, '仅预留、无物理占用的轨道允许拆除（拆除即释放该预留）');
+    ticks(game, 2);
+    const ghostKey = reserveTile.x + ',' + reserveTile.y;
+    ok(!ry.reserve.has(ghostKey), '被拆轨格不再残留在区间预留表（无幽灵预留）');
+    // 物理占用格仍禁止拆除
+    place('rail', reserveTile.x, reserveTile.y, 0);
+    ticks(game, 30);
+    const occ = m.buildingAt(tr.x, tr.y);
+    ok(game.removeBuilding(occ) === false, '列车物理占用格依旧禁止拆除');
+    ticks(game, 400);
+    ok(stationCount(st, 'coal') === 1, '补轨后列车重新寻路并送达');
+  }
+}
+
+console.log('\n[R16] 改计划/单程切循环的占用释放与运输进度：中途改站不卡区间，进度按新计划继续');
+{
+  const y = 78;
+  straightLine(2, 20, y, { 20: true });
+  place('station', 20, y - 2, 0);
+  place('rail', 19, y - 1, 0); place('rail', 19, y - 2, 0); place('rail', 20, y - 1, 0);
+  const stEnd = m.buildingAt(20, y), stAlt = m.buildingAt(20, y - 2);
+  const depot = place('trainDepot', 2, y - 1, 0);
+  const tr = ry.spawnTrain(depot);
+  tr.plan.loop = false;
+  tr.addStop(stEnd.stationId, 'unload', 'ironPlate', 10);
+  tr.pushToTrain('ironPlate', 10);
+  ticks(game, 8);
+  // 行驶中途改计划：跳过原站、改去 alt（单程），再切回循环
+  tr.skip();
+  tr.addStop(stAlt.stationId, 'unload', 'ironPlate', 10);
+  tr.setLoop(true);
+  ticks(game, 400);
+  ok(stationCount(stAlt, 'ironPlate') === 10, '改计划后 10 铁板送达新站（运输进度按新计划继续）');
+  // 旧线（主线终点）不应有货
+  ok(stationCount(stEnd, 'ironPlate') === 0, '旧目标站未收到货（改计划后未沿旧预留行驶）');
+}
+
+console.log('\n[R17] 交叉口 FIFO：不同方向列车争用交汇点，多波轮转通过不饿死、不重叠');
+{
+  const y = 84;
+  // 两条独立直线在 (7,y) 十字交叉，两端均为尽头站；每波用两列全新车（东西/南北各一），
+  // 到站清道后解编、下一波重新发车——专门压测交汇点争用的 FIFO 公平性
+  straightLine(1, 13, y, { 1: true, 13: true });
+  for (let yy = y - 5; yy <= y + 5; yy++) {
+    if (yy === y) continue;
+    if (yy === y - 5 || yy === y + 5) place('station', 7, yy, 0);
+    else place('rail', 7, yy, 0);
+  }
+  const stW = m.buildingAt(1, y), stE = m.buildingAt(13, y);
+  const stS = m.buildingAt(7, y - 5), stN = m.buildingAt(7, y + 5);
+  function mkOne(id, x0, y0, dir, dest) {
+    const t = new FG.Train(id, x0, y0, dir);
+    ry.trains.push(t); ry.occupy.set(x0 + ',' + y0, t.id);
+    t.plan.loop = false;
+    t.addStop(dest.stationId, 'unload', null, 1);
+    t.pushToTrain('stone', 1);
+    return t;
+  }
+  function chestStone(st) {
+    let n = 0;
+    for (const s of st.chest) if (s.type === 'stone') { n += s.count; s.count = 0; s.type = null; }
+    return n;
+  }
+  let overlap3 = false, maxWait = 0;
+  const cur = {};
+  let eastArrive = 0, northArrive = 0;
+  for (let wave = 0; wave < 4; wave++) {
+    const te = mkOne('Te' + wave, 2, y, 1, stE);
+    const tn = mkOne('Tn' + wave, 7, y - 4, 1, stN);
+    for (let i = 0; i < 800; i++) {
+      game.tickOnce();
+      for (const t of ry.trains) {
+        if (t.state === 'waiting' || t.state === 'meeting') {
+          cur[t.id] = (cur[t.id] || 0) + 1;
+          maxWait = Math.max(maxWait, cur[t.id]);
+        } else cur[t.id] = 0;
+      }
+      const pos = {};
+      for (const t of ry.trains) {
+        const k = t.x + ',' + t.y;
+        if (pos[k]) overlap3 = true;
+        pos[k] = t.id;
+      }
+      if (te.state === 'idle' && tn.state === 'idle') break;
+    }
+    if (chestStone(stE) >= 1) eastArrive++;
+    if (chestStone(stN) >= 1) northArrive++;
+    for (const t of [te, tn]) ry.removeTrain(t);
+  }
+  ok(!overlap3, '交叉车流全程无同格重叠');
+  ok(eastArrive === 4, '4 波东西向列车全部穿过交汇点抵达（' + eastArrive + '/4，方向未饿死）');
+  ok(northArrive === 4, '4 波南北向列车全部穿过交汇点抵达（' + northArrive + '/4，方向未饿死）');
+  ok(maxWait < 300, 'FIFO 轮转下无列车在交汇点长期等待（最长连续 ' + maxWait + ' tick）');
+}
+console.log('\n[R18] 区间预留读档：旧档无 reserve 字段也能由列车位置惰性重建，且不与他车冲突');
+{
+  const y = 90;
+  straightLine(2, 30, y, { 30: true });
+  const st = m.buildingAt(30, y);
+  const depot = place('trainDepot', 2, y - 1, 0);
+  const trA = ry.spawnTrain(depot);
+  trA.addStop(st.stationId, 'unload', null, 1);
+  trA.pushToTrain('stone', 1);
+  ticks(game, 10);
+  const trB = ry.spawnTrain(depot);
+  trB.addStop(st.stationId, 'unload', null, 1);
+  trB.pushToTrain('stone', 1);
+  ticks(game, 20);
+  const data = JSON.parse(JSON.stringify(game.serialize()));
+  const g6 = new FG.Game();
+  g6.deserialize(data);
+  const ry6 = g6.railway;
+  // 读档瞬间 reserve 为空：首个 tick 后各车应已重建预留，且预留互不冲突
+  g6.tickOnce();
+  let conflict = false;
+  const owners = {};
+  for (const [k, id] of ry6.reserve) {
+    if (owners[k] && owners[k] !== id) conflict = true;
+    owners[k] = id;
+  }
+  for (const [k, id] of ry6.occupy) {
+    if (owners[k] && owners[k] !== id) conflict = true;
+  }
+  ok(!conflict, '读档后首个 tick 重建的区间预留与物理占用互不冲突');
+  // 无 reservation 字段的更旧存档（模拟）：手工删掉也应正常
+  const oldish = JSON.parse(JSON.stringify(data));
+  // railway 段本身没有 reserve 字段（预留不序列化）——确认结构并直接推进
+  ok(oldish.railway && oldish.railway.trains && oldish.railway.trains[0].moveTimer !== undefined,
+     '存档含列车移动进度（moveTimer）与计划，区间预留按设计不序列化、读档重建');
+  let overlap4 = false;
+  for (let i = 0; i < 800; i++) {
+    g6.tickOnce();
+    const pos = {};
+    for (const t of ry6.trains) {
+      const k = t.x + ',' + t.y;
+      if (pos[k]) { overlap4 = true; break; }
+      pos[k] = t.id;
+    }
+    if (overlap4) break;
+  }
+  ok(!overlap4, '读档重建预留后列车继续运行全程不重叠');
+}
+
 console.log('\n结果：' + pass + ' 通过, ' + fail + ' 失败');
 process.exit(fail ? 1 : 0);

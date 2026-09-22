@@ -359,7 +359,7 @@ FG.Panels = (() => {
   }
 
   // ================= 列车 =================
-  const TRAIN_STATE_NAMES = { moving: '行驶中', docked: '装卸中', waiting: '等站排队', blocked: '堵死/让行', noroute: '断路（待轨网接通）', paused: '已停运', idle: '待命' };
+  const TRAIN_STATE_NAMES = { moving: '行驶中', docked: '装卸中', waiting: '等站/交叉口排队', meeting: '单线会车等待', blocked: '堵死（需改线）', noroute: '断路（待轨网接通）', paused: '已停运', idle: '待命' };
 
   function trainInfo(tr) {
     const game = FG.game, ry = game.railway;
@@ -1051,7 +1051,7 @@ FG.Panels = (() => {
   function bindTrainActions(tr) {
     const refresh = () => render();
     const loopChk = document.getElementById('train-loop');
-    if (loopChk) loopChk.onchange = () => { tr.plan.loop = loopChk.checked; refresh(); };
+    if (loopChk) loopChk.onchange = () => { tr.setLoop(loopChk.checked); refresh(); };
     document.querySelectorAll('[data-stop-act]').forEach(sel => {
       sel.onchange = () => tr.updateStop(+sel.dataset.stopAct, { action: sel.value });
     });
@@ -1095,14 +1095,9 @@ FG.Panels = (() => {
     if (rm) rm.onclick = () => FG.game.removeTrainSelection();
   }
 
-  /** 上移/下移停靠站（简单交换；当前停站索引同步） */
+  /** 上移/下移停靠站（交换站序；当前停站索引同步，路径与区间预留随之重算） */
   function moveStop(tr, i, dir) {
-    const j = i + dir;
-    if (j < 0 || j >= tr.stops.length) return;
-    const arr = tr.stops;
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-    if (tr.stopIdx === i) tr.stopIdx = j;
-    else if (tr.stopIdx === j) tr.stopIdx = i;
+    tr.reorderStops(i, i + dir);
   }
 
   /** 交付站面板内的接单/刷新/取消按钮（信息页与合同页共用） */

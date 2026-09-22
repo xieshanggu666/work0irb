@@ -7,8 +7,8 @@ import { useEventVersion } from '../../hooks';
 import { Section, InfoGrid, SlotRow } from './ui.jsx';
 
 const TRAIN_STATE_NAMES = {
-  moving: '行驶中', docked: '装卸中', waiting: '等站排队',
-  blocked: '堵死/让行', noroute: '断路（待轨网接通）', paused: '已停运', idle: '待命',
+  moving: '行驶中', docked: '装卸中', waiting: '等站/交叉口排队', meeting: '单线会车等待',
+  blocked: '堵死（需改线）', noroute: '断路（待轨网接通）', paused: '已停运', idle: '待命',
 };
 
 export default function TrainInfo({ game, tr }) {
@@ -20,10 +20,7 @@ export default function TrainInfo({ game, tr }) {
   const moveStop = (i, dir) => {
     const j = i + dir;
     if (j < 0 || j >= tr.stops.length) return;
-    const arr = tr.stops;
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-    if (tr.stopIdx === i) tr.stopIdx = j;
-    else if (tr.stopIdx === j) tr.stopIdx = i;
+    tr.reorderStops(i, j); // 站序变更即作废旧路径/区间预留并按新计划重新预留
     FG.Events.emit('selection:change', tr);
   };
 
@@ -33,7 +30,8 @@ export default function TrainInfo({ game, tr }) {
         <InfoGrid rows={[
           ['状态', TRAIN_STATE_NAMES[tr.state] || tr.state,
             tr.state === 'docked' ? 'status-working'
-              : (tr.state === 'blocked' || tr.state === 'noroute') ? 'status-blocked' : ''],
+              : (tr.state === 'blocked' || tr.state === 'noroute') ? 'status-blocked'
+              : (tr.state === 'meeting' ? 'status-waiting' : '')],
           ['位置', `(${tr.x}, ${tr.y})`],
           ['载货', `${tr.cargoTotal()}/${FG.Config.TRAIN_CARGO_CAP}`],
           ['停站', tr.stops.length ? `${tr.stopIdx + 1} / ${tr.stops.length}` : '无计划'],
@@ -52,7 +50,7 @@ export default function TrainInfo({ game, tr }) {
           <input
             type="checkbox"
             checked={tr.plan.loop !== false}
-            onChange={(e) => { tr.plan.loop = e.target.checked; FG.Events.emit('selection:change', tr); }}
+            onChange={(e) => { tr.setLoop(e.target.checked); FG.Events.emit('selection:change', tr); }}
           />
           <span>循环运输：末站完成后自动返回首站；取消则末站卸完即待命</span>
         </label>

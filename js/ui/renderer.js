@@ -295,6 +295,25 @@ FG.Renderer = (() => {
     if (!ry || !ry.trains.length) return;
     const t = T();
     const moveTicks = FG.Config.TRAIN_MOVE_TICKS;
+    // 区间预留：半透明描边框（颜色与所属列车状态色一致），让玩家看清各车的前方路权
+    const stateCol = st => ({
+      moving: '#4d9fd9', docked: '#58c26f', waiting: '#e8b33d', meeting: '#3fc7c0',
+      blocked: '#e05c5c', noroute: '#c060e0', paused: '#8b93a8', idle: '#9aa6bc',
+    }[st] || '#9aa6bc');
+    if (ry.reserve && ry.reserve.size) {
+      for (const [k, id] of ry.reserve) {
+        const tr = ry.trainById(id);
+        if (!tr) continue;
+        const [x, y] = k.split(',').map(Number);
+        ctx.save();
+        ctx.strokeStyle = stateCol(tr.state);
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(x * t + 2.5, y * t + 2.5, t - 5, t - 5);
+        ctx.restore();
+      }
+    }
     for (const tr of ry.trains) {
       let wx = tr.x, wy = tr.y;
       if (tr.moveTimer > 0) {
@@ -307,7 +326,7 @@ FG.Renderer = (() => {
       ctx.translate(cx, cy);
       ctx.rotate(Math.atan2(FG.Utils.dirVec(tr.dir).y, FG.Utils.dirVec(tr.dir).x));
       // 车体（朝向 = +x 方向）
-      const col = { moving: '#4d9fd9', docked: '#58c26f', waiting: '#e8b33d', blocked: '#e05c5c', noroute: '#c060e0', paused: '#8b93a8', idle: '#9aa6bc' }[tr.state] || '#9aa6bc';
+      const col = stateCol(tr.state);
       ctx.fillStyle = '#20262f';
       roundRect(-13, -8, 26, 16, 3); ctx.fill();
       ctx.fillStyle = col;

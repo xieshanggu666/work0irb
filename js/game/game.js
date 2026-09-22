@@ -435,7 +435,12 @@ FG.Game = class Game {
     }
     this.sim.unregister(b);
     this.map.unregister(b);
-    if (b.type === 'rail' || b.def.railStation) this.railway.markDirty();
+    if (b.type === 'rail' || b.def.railStation) {
+      // 拆轨即释放区间预留：物理无车格上的任何列车预留立即作废（相关列车下一 tick 图重建时重新寻路）
+      const k = FG.Utils.key(b.x, b.y);
+      if (this.railway.reserve.has(k)) this.railway.reserve.delete(k);
+      this.railway.markDirty();
+    }
     if (this.selection === b) this.selection = null;
     FG.Events.emit('building:removed', b);
     return true;
