@@ -1,0 +1,104 @@
+/* React 版布局适配 —— 原暗色主题（css/style.css）整体保留，这里只处理挂载点与组件化差异 */
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* React 版用类名 .app-layout 替代原 #layout，网格保持 168 / 1fr / 320 */
+.app-layout {
+  display: grid;
+  grid-template-columns: 168px 1fr 320px;
+  flex: 1;
+  min-height: 0;
+}
+
+.toolbar,
+.sidepanel {
+  background: var(--bg2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.toolbar { border-right: 1px solid var(--border); }
+.sidepanel { border-left: 1px solid var(--border); }
+
+.map-wrap {
+  position: relative;
+  background: #0d0f14;
+  overflow: hidden;
+  min-width: 0;
+}
+.map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 12px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.item-strip {
+  display: flex;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* 弹窗：React 直接渲染到组件树内（不再手动 appendChild） */
+.modal-mask { z-index: 100; }
+
+/* 科技树容器 */
+.tech-tree {
+  position: fixed; inset: 0; background: rgba(8,10,16,.88); z-index: 90;
+  display: flex; flex-direction: column;
+}
+.tech-wrap { flex: 1; position: relative; overflow: hidden; }
+.tech-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* 输入控件统一暗色 */
+input, select, textarea {
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+input[type="checkbox"] { padding: 0; }
+select option { background: var(--bg2); }
+
+/* 提示条切换内容时避免换行抖动 */
+.bp-hint b { color: var(--accent2); }
+
+/* 右侧面板内小控件 */
+.sp-body { flex: 1; overflow-y: auto; padding: 10px; min-height: 0; }
+.sp-tabs { display: flex; padding: 6px; gap: 4px; flex: 0 0 auto; }
+.sp-tabs button { flex: 1; font-size: 12px; }
+
+/* React 列表项按钮去掉默认全宽 */
+.stop-cfg button { flex: 0 0 auto; }
+
+/* 弹窗内两列表单 */
+.form-grid { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; align-items: center; }
+
+/* 简单的淡入 */
+@keyframes modal-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.modal { animation: modal-in .12s ease-out; }
