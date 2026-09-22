@@ -359,13 +359,13 @@ FG.Panels = (() => {
   }
 
   // ================= 列车 =================
-  const TRAIN_STATE_NAMES = { moving: '行驶中', docked: '装卸中', waiting: '等站排队', blocked: '堵死/让行', noroute: '断路（待轨网接通）', paused: '已停运', idle: '待命' };
+  const TRAIN_STATE_NAMES = { moving: '行驶中', docked: '装卸中', waiting: '等站排队', meeting: '会车等待（信号机外）', blocked: '堵死/对顶（需加侧线改线）', noroute: '断路（待轨网接通）', paused: '已停运', idle: '待命' };
 
   function trainInfo(tr) {
     const game = FG.game, ry = game.railway;
     let h = `<div class="panel-sec"><h4>🚆 列车 ${tr.id}</h4>
       <div class="info-grid">
-        <div class="k">状态</div><div class="v status-${tr.state === 'docked' ? 'working' : tr.state === 'blocked' || tr.state === 'noroute' ? 'blocked' : 'idle'}">${TRAIN_STATE_NAMES[tr.state] || tr.state}</div>
+        <div class="k">状态</div><div class="v status-${tr.state === 'docked' ? 'working' : (tr.state === 'blocked' || tr.state === 'noroute') ? 'blocked' : (tr.state === 'meeting' || tr.state === 'waiting') ? 'waiting' : 'idle'}">${TRAIN_STATE_NAMES[tr.state] || tr.state}</div>
         <div class="k">位置</div><div class="v">(${tr.x}, ${tr.y})</div>
         <div class="k">载货</div><div class="v">${tr.cargoTotal()}/${FG.Config.TRAIN_CARGO_CAP}</div>
         <div class="k">停站</div><div class="v">${tr.stops.length ? (tr.stopIdx + 1) + ' / ' + tr.stops.length : '无计划'}</div>
@@ -1051,7 +1051,7 @@ FG.Panels = (() => {
   function bindTrainActions(tr) {
     const refresh = () => render();
     const loopChk = document.getElementById('train-loop');
-    if (loopChk) loopChk.onchange = () => { tr.plan.loop = loopChk.checked; refresh(); };
+    if (loopChk) loopChk.onchange = () => { tr.setLoop(loopChk.checked); refresh(); };
     document.querySelectorAll('[data-stop-act]').forEach(sel => {
       sel.onchange = () => tr.updateStop(+sel.dataset.stopAct, { action: sel.value });
     });
@@ -1096,14 +1096,7 @@ FG.Panels = (() => {
   }
 
   /** 上移/下移停靠站（简单交换；当前停站索引同步） */
-  function moveStop(tr, i, dir) {
-    const j = i + dir;
-    if (j < 0 || j >= tr.stops.length) return;
-    const arr = tr.stops;
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-    if (tr.stopIdx === i) tr.stopIdx = j;
-    else if (tr.stopIdx === j) tr.stopIdx = i;
-  }
+  function moveStop(tr, i, dir) { tr.reorderStop(i, dir); }
 
   /** 交付站面板内的接单/刷新/取消按钮（信息页与合同页共用） */
   function bindContractActions() {

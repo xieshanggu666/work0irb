@@ -38,6 +38,10 @@ FG.Config = {
   TRAIN_TRANSFER: 2,         // 停靠站点时每 tick 装卸件数
   TRAIN_DWELL_MIN: 10,       // 最短停站 tick 数（给机械臂/装卸反应时间）
   TRAIN_DWELL_MAX: 300,      // 最长停站 tick 数（15 秒，防堵站：到时强制离站）
+  TRAIN_LOOKAHEAD: 5,        // 区间预留前瞻格数（信号机预留：一次锁多格，含道岔/交叉口）
+  TRAIN_REROUTE_TICKS: 40,   // 拥堵重寻路间隔（2 仿真秒：前方占用/会车门关闭后周期性尝试绕行）
+  TRAIN_PENALTY_TRAIN: 400,  // 加权寻路中「区间内有车/被对向预留」的通行代价（绕行长路优先）
+  TRAIN_PENALTY_JUNC: 60,    // 加权寻路中「道岔/交叉口已被他人预占」的代价（避让垂直争用）
   STATION_SLOTS: 4,          // 火车站货位格数（与箱子一致）
   STATION_SLOT_CAP: 1000,    // 火车站单货位容量
 

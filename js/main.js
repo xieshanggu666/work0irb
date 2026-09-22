@@ -243,7 +243,7 @@
     const planEntry = !b && game.construction ? game.construction.entryAt(tile.x, tile.y) : null;
     let html = '';
     if (tr) {
-      const ST = { moving: '行驶中', docked: '装卸中', waiting: '等站排队', blocked: '堵死/让行', noroute: '断路', paused: '已停运', idle: '待命' };
+      const ST = { moving: '行驶中', docked: '装卸中', waiting: '等站排队', meeting: '会车等待', blocked: '堵死/对顶', noroute: '断路', paused: '已停运', idle: '待命' };
       html += `<div class="tt-title">🚆 列车 ${tr.id}</div>`;
       html += `<div class="tt-row">状态：<b>${ST[tr.state] || tr.state}</b></div>`;
       html += `<div class="tt-row">载货 <b>${tr.cargoTotal()}/${FG.Config.TRAIN_CARGO_CAP}</b> 件 · 停靠 ${tr.stopIdx + 1}/${Math.max(1, tr.stops.length)}</div>`;

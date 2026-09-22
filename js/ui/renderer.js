@@ -295,6 +295,16 @@ FG.Renderer = (() => {
     if (!ry || !ry.trains.length) return;
     const t = T();
     const moveTicks = FG.Config.TRAIN_MOVE_TICKS;
+    // 区间预留：未被列车物理占有的前瞻格铺一层淡色光带（蓝=预留，琥珀=会车等待车）
+    for (const [k, id] of ry.reserve) {
+      if (ry.occupy.get(k) === id) continue;
+      const tr = ry.trainById(id);
+      if (!tr || tr.state === 'paused' || tr.state === 'idle' || tr.state === 'docked') continue;
+      const [rx, ryy] = k.split(',').map(Number);
+      ctx.fillStyle = (tr.state === 'meeting' || tr.state === 'blocked')
+        ? 'rgba(232,179,61,0.16)' : 'rgba(93,169,240,0.14)';
+      ctx.fillRect(rx * t + 2, ryy * t + 2, t - 4, t - 4);
+    }
     for (const tr of ry.trains) {
       let wx = tr.x, wy = tr.y;
       if (tr.moveTimer > 0) {
@@ -307,7 +317,7 @@ FG.Renderer = (() => {
       ctx.translate(cx, cy);
       ctx.rotate(Math.atan2(FG.Utils.dirVec(tr.dir).y, FG.Utils.dirVec(tr.dir).x));
       // 车体（朝向 = +x 方向）
-      const col = { moving: '#4d9fd9', docked: '#58c26f', waiting: '#e8b33d', blocked: '#e05c5c', noroute: '#c060e0', paused: '#8b93a8', idle: '#9aa6bc' }[tr.state] || '#9aa6bc';
+      const col = { moving: '#4d9fd9', docked: '#58c26f', waiting: '#e8b33d', meeting: '#e0a030', blocked: '#e05c5c', noroute: '#c060e0', paused: '#8b93a8', idle: '#9aa6bc' }[tr.state] || '#9aa6bc';
       ctx.fillStyle = '#20262f';
       roundRect(-13, -8, 26, 16, 3); ctx.fill();
       ctx.fillStyle = col;

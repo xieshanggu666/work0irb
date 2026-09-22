@@ -206,6 +206,7 @@ button.danger:hover { background: #4d2c2c; }
 .info-grid .v.status-working { color: var(--green); }
 .info-grid .v.status-starving { color: var(--red); font-weight: 600; }
 .info-grid .v.status-blocked { color: var(--orange); font-weight: 600; }
+.info-grid .v.status-waiting { color: var(--orange); }
 .info-grid .v.status-idle { color: var(--text-dim); }
 .info-grid .v.status-broken { color: var(--red); font-weight: 700; }
 
